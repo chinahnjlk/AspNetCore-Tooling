@@ -60,7 +60,7 @@ namespace Microsoft.VisualStudio.Editor.Razor
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.False(result);
@@ -75,7 +75,7 @@ namespace Microsoft.VisualStudio.Editor.Razor
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);
@@ -89,14 +89,14 @@ namespace Microsoft.VisualStudio.Editor.Razor
             // Arrange
             var factoryService = CreateFactoryService();
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
-            factoryService.TryInitializeTextBuffer(textBuffer);
+            factoryService.InitializeTextBuffer(textBuffer);
             var expectedDocumentTracker = textBuffer.Properties[typeof(VisualStudioDocumentTracker)];
 
             // Create a second factory service so it generates a different tracker
             factoryService = CreateFactoryService();
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);
@@ -144,7 +144,7 @@ namespace Microsoft.VisualStudio.Editor.Razor
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);
@@ -158,14 +158,14 @@ namespace Microsoft.VisualStudio.Editor.Razor
             // Arrange
             var factoryService = CreateFactoryService();
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
-            factoryService.TryInitializeTextBuffer(textBuffer);
+            factoryService.InitializeTextBuffer(textBuffer);
             var expectedParser = textBuffer.Properties[typeof(VisualStudioRazorParser)];
 
             // Create a second factory service so it generates a different parser
             factoryService = CreateFactoryService();
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);
@@ -213,7 +213,7 @@ namespace Microsoft.VisualStudio.Editor.Razor
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);
@@ -227,14 +227,14 @@ namespace Microsoft.VisualStudio.Editor.Razor
             // Arrange
             var factoryService = CreateFactoryService();
             var textBuffer = Mock.Of<ITextBuffer>(b => b.ContentType == RazorCoreContentType && b.Properties == new PropertyCollection());
-            factoryService.TryInitializeTextBuffer(textBuffer);
+            factoryService.InitializeTextBuffer(textBuffer);
             var expectedSmartIndenter = textBuffer.Properties[typeof(BraceSmartIndenter)];
 
             // Create a second factory service so it generates a different smart indenter
             factoryService = CreateFactoryService();
 
             // Act
-            var result = factoryService.TryInitializeTextBuffer(textBuffer);
+            var result = factoryService.InitializeTextBuffer(textBuffer);
 
             // Assert
             Assert.True(result);

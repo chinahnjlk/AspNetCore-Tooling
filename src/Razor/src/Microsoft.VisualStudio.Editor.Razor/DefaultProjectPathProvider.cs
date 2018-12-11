@@ -2,15 +2,22 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Text;
 
 namespace Microsoft.VisualStudio.Editor.Razor
 {
+    [System.Composition.Shared]
+    [Export(typeof(ProjectPathProvider))]
     internal class DefaultProjectPathProvider : ProjectPathProvider
     {
         private readonly TextBufferProjectService _projectService;
+        private readonly LiveShareProjectPathProvider _liveShareProjectPathProvider;
 
-        public DefaultProjectPathProvider(TextBufferProjectService projectService)
+        [ImportingConstructor]
+        public DefaultProjectPathProvider(
+            TextBufferProjectService projectService,
+            [Import(typeof(LiveShareProjectPathProvider))] LiveShareProjectPathProvider liveShareProjectPathProvider)
         {
             if (projectService == null)
             {
@@ -18,6 +25,7 @@ namespace Microsoft.VisualStudio.Editor.Razor
             }
 
             _projectService = projectService;
+            _liveShareProjectPathProvider = liveShareProjectPathProvider;
         }
 
         public override bool TryGetProjectPath(ITextBuffer textBuffer, out string filePath)
@@ -25,6 +33,12 @@ namespace Microsoft.VisualStudio.Editor.Razor
             if (textBuffer == null)
             {
                 throw new ArgumentNullException(nameof(textBuffer));
+            }
+
+            if (_liveShareProjectPathProvider != null &&
+                _liveShareProjectPathProvider.TryGetProjectPath(textBuffer, out filePath))
+            {
+                return true;
             }
 
             var project = _projectService.GetHostProject(textBuffer);
@@ -37,5 +51,9 @@ namespace Microsoft.VisualStudio.Editor.Razor
             filePath = _projectService.GetProjectPath(project);
             return true;
         }
+    }
+
+    internal abstract class LiveShareProjectPathProvider : ProjectPathProvider
+    {
     }
 }
