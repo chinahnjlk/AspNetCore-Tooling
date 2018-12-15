@@ -1475,10 +1475,10 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         return Update(StartTag, Body, endTag);
     }
 
-    public MarkupElementSyntax AddStartTagChildren(params RazorSyntaxNode[] items)
+    public MarkupElementSyntax AddStartTagAttributes(params RazorSyntaxNode[] items)
     {
         var _startTag = this.StartTag ?? SyntaxFactory.MarkupStartTag();
-        return this.WithStartTag(_startTag.WithChildren(_startTag.Children.AddRange(items)));
+        return this.WithStartTag(_startTag.WithAttributes(_startTag.Attributes.AddRange(items)));
     }
 
     public MarkupElementSyntax AddBody(params RazorSyntaxNode[] items)
@@ -1486,27 +1486,72 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         return WithBody(this.Body.AddRange(items));
     }
 
-    public MarkupElementSyntax AddEndTagChildren(params RazorSyntaxNode[] items)
+    public MarkupElementSyntax AddEndTagAttributes(params RazorSyntaxNode[] items)
     {
         var _endTag = this.EndTag ?? SyntaxFactory.MarkupEndTag();
-        return this.WithEndTag(_endTag.WithChildren(_endTag.Children.AddRange(items)));
+        return this.WithEndTag(_endTag.WithAttributes(_endTag.Attributes.AddRange(items)));
     }
   }
 
-  internal sealed partial class MarkupStartTagSyntax : RazorBlockSyntax
+  internal sealed partial class MarkupStartTagSyntax : MarkupSyntaxNode
   {
-    private SyntaxNode _children;
+    private SyntaxToken _openAngle;
+    private SyntaxToken _bang;
+    private SyntaxToken _name;
+    private SyntaxNode _attributes;
+    private SyntaxToken _forwardSlash;
+    private SyntaxToken _closeAngle;
 
     internal MarkupStartTagSyntax(GreenNode green, SyntaxNode parent, int position)
         : base(green, parent, position)
     {
     }
 
-    public override SyntaxList<RazorSyntaxNode> Children 
+    public SyntaxToken OpenAngle 
     {
         get
         {
-            return new SyntaxList<RazorSyntaxNode>(GetRed(ref _children, 0));
+            return GetRedAtZero(ref _openAngle);
+        }
+    }
+
+    public SyntaxToken Bang 
+    {
+        get
+        {
+            return GetRed(ref _bang, 1);
+        }
+    }
+
+    public SyntaxToken Name 
+    {
+        get
+        {
+            return GetRed(ref _name, 2);
+        }
+    }
+
+    public SyntaxList<RazorSyntaxNode> Attributes 
+    {
+        get
+        {
+            return new SyntaxList<RazorSyntaxNode>(GetRed(ref _attributes, 3));
+        }
+    }
+
+    public SyntaxToken ForwardSlash 
+    {
+        get
+        {
+            return GetRed(ref _forwardSlash, 4);
+        }
+    }
+
+    public SyntaxToken CloseAngle 
+    {
+        get
+        {
+            return GetRed(ref _closeAngle, 5);
         }
     }
 
@@ -1514,7 +1559,12 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
     {
         switch (index)
         {
-            case 0: return GetRedAtZero(ref _children);
+            case 0: return GetRedAtZero(ref _openAngle);
+            case 1: return GetRed(ref _bang, 1);
+            case 2: return GetRed(ref _name, 2);
+            case 3: return GetRed(ref _attributes, 3);
+            case 4: return GetRed(ref _forwardSlash, 4);
+            case 5: return GetRed(ref _closeAngle, 5);
             default: return null;
         }
     }
@@ -1522,7 +1572,12 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
     {
         switch (index)
         {
-            case 0: return _children;
+            case 0: return _openAngle;
+            case 1: return _bang;
+            case 2: return _name;
+            case 3: return _attributes;
+            case 4: return _forwardSlash;
+            case 5: return _closeAngle;
             default: return null;
         }
     }
@@ -1537,11 +1592,11 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         visitor.VisitMarkupStartTag(this);
     }
 
-    public MarkupStartTagSyntax Update(SyntaxList<RazorSyntaxNode> children)
+    public MarkupStartTagSyntax Update(SyntaxToken openAngle, SyntaxToken bang, SyntaxToken name, SyntaxList<RazorSyntaxNode> attributes, SyntaxToken forwardSlash, SyntaxToken closeAngle)
     {
-        if (children != Children)
+        if (openAngle != OpenAngle || bang != Bang || name != Name || attributes != Attributes || forwardSlash != ForwardSlash || closeAngle != CloseAngle)
         {
-            var newNode = SyntaxFactory.MarkupStartTag(children);
+            var newNode = SyntaxFactory.MarkupStartTag(openAngle, bang, name, attributes, forwardSlash, closeAngle);
             var annotations = GetAnnotations();
             if (annotations != null && annotations.Length > 0)
                return newNode.WithAnnotations(annotations);
@@ -1551,33 +1606,92 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         return this;
     }
 
-    internal override RazorBlockSyntax WithChildrenCore(SyntaxList<RazorSyntaxNode> children) => WithChildren(children);
-    public new MarkupStartTagSyntax WithChildren(SyntaxList<RazorSyntaxNode> children)
+    public MarkupStartTagSyntax WithOpenAngle(SyntaxToken openAngle)
     {
-        return Update(children);
+        return Update(openAngle, Bang, Name, Attributes, ForwardSlash, CloseAngle);
     }
-    internal override RazorBlockSyntax AddChildrenCore(params RazorSyntaxNode[] items) => AddChildren(items);
 
-    public new MarkupStartTagSyntax AddChildren(params RazorSyntaxNode[] items)
+    public MarkupStartTagSyntax WithBang(SyntaxToken bang)
     {
-        return WithChildren(this.Children.AddRange(items));
+        return Update(OpenAngle, bang, Name, Attributes, ForwardSlash, CloseAngle);
+    }
+
+    public MarkupStartTagSyntax WithName(SyntaxToken name)
+    {
+        return Update(OpenAngle, Bang, name, Attributes, ForwardSlash, CloseAngle);
+    }
+
+    public MarkupStartTagSyntax WithAttributes(SyntaxList<RazorSyntaxNode> attributes)
+    {
+        return Update(OpenAngle, Bang, Name, attributes, ForwardSlash, CloseAngle);
+    }
+
+    public MarkupStartTagSyntax WithForwardSlash(SyntaxToken forwardSlash)
+    {
+        return Update(OpenAngle, Bang, Name, Attributes, forwardSlash, CloseAngle);
+    }
+
+    public MarkupStartTagSyntax WithCloseAngle(SyntaxToken closeAngle)
+    {
+        return Update(OpenAngle, Bang, Name, Attributes, ForwardSlash, closeAngle);
+    }
+
+    public MarkupStartTagSyntax AddAttributes(params RazorSyntaxNode[] items)
+    {
+        return WithAttributes(this.Attributes.AddRange(items));
     }
   }
 
-  internal sealed partial class MarkupEndTagSyntax : RazorBlockSyntax
+  internal sealed partial class MarkupEndTagSyntax : MarkupSyntaxNode
   {
-    private SyntaxNode _children;
+    private SyntaxToken _openAngle;
+    private SyntaxToken _bang;
+    private SyntaxToken _name;
+    private SyntaxNode _attributes;
+    private SyntaxToken _closeAngle;
 
     internal MarkupEndTagSyntax(GreenNode green, SyntaxNode parent, int position)
         : base(green, parent, position)
     {
     }
 
-    public override SyntaxList<RazorSyntaxNode> Children 
+    public SyntaxToken OpenAngle 
     {
         get
         {
-            return new SyntaxList<RazorSyntaxNode>(GetRed(ref _children, 0));
+            return GetRedAtZero(ref _openAngle);
+        }
+    }
+
+    public SyntaxToken Bang 
+    {
+        get
+        {
+            return GetRed(ref _bang, 1);
+        }
+    }
+
+    public SyntaxToken Name 
+    {
+        get
+        {
+            return GetRed(ref _name, 2);
+        }
+    }
+
+    public SyntaxList<RazorSyntaxNode> Attributes 
+    {
+        get
+        {
+            return new SyntaxList<RazorSyntaxNode>(GetRed(ref _attributes, 3));
+        }
+    }
+
+    public SyntaxToken CloseAngle 
+    {
+        get
+        {
+            return GetRed(ref _closeAngle, 4);
         }
     }
 
@@ -1585,7 +1699,11 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
     {
         switch (index)
         {
-            case 0: return GetRedAtZero(ref _children);
+            case 0: return GetRedAtZero(ref _openAngle);
+            case 1: return GetRed(ref _bang, 1);
+            case 2: return GetRed(ref _name, 2);
+            case 3: return GetRed(ref _attributes, 3);
+            case 4: return GetRed(ref _closeAngle, 4);
             default: return null;
         }
     }
@@ -1593,7 +1711,11 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
     {
         switch (index)
         {
-            case 0: return _children;
+            case 0: return _openAngle;
+            case 1: return _bang;
+            case 2: return _name;
+            case 3: return _attributes;
+            case 4: return _closeAngle;
             default: return null;
         }
     }
@@ -1608,11 +1730,11 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         visitor.VisitMarkupEndTag(this);
     }
 
-    public MarkupEndTagSyntax Update(SyntaxList<RazorSyntaxNode> children)
+    public MarkupEndTagSyntax Update(SyntaxToken openAngle, SyntaxToken bang, SyntaxToken name, SyntaxList<RazorSyntaxNode> attributes, SyntaxToken closeAngle)
     {
-        if (children != Children)
+        if (openAngle != OpenAngle || bang != Bang || name != Name || attributes != Attributes || closeAngle != CloseAngle)
         {
-            var newNode = SyntaxFactory.MarkupEndTag(children);
+            var newNode = SyntaxFactory.MarkupEndTag(openAngle, bang, name, attributes, closeAngle);
             var annotations = GetAnnotations();
             if (annotations != null && annotations.Length > 0)
                return newNode.WithAnnotations(annotations);
@@ -1622,16 +1744,34 @@ namespace Microsoft.AspNetCore.Razor.Language.Syntax
         return this;
     }
 
-    internal override RazorBlockSyntax WithChildrenCore(SyntaxList<RazorSyntaxNode> children) => WithChildren(children);
-    public new MarkupEndTagSyntax WithChildren(SyntaxList<RazorSyntaxNode> children)
+    public MarkupEndTagSyntax WithOpenAngle(SyntaxToken openAngle)
     {
-        return Update(children);
+        return Update(openAngle, Bang, Name, Attributes, CloseAngle);
     }
-    internal override RazorBlockSyntax AddChildrenCore(params RazorSyntaxNode[] items) => AddChildren(items);
 
-    public new MarkupEndTagSyntax AddChildren(params RazorSyntaxNode[] items)
+    public MarkupEndTagSyntax WithBang(SyntaxToken bang)
     {
-        return WithChildren(this.Children.AddRange(items));
+        return Update(OpenAngle, bang, Name, Attributes, CloseAngle);
+    }
+
+    public MarkupEndTagSyntax WithName(SyntaxToken name)
+    {
+        return Update(OpenAngle, Bang, name, Attributes, CloseAngle);
+    }
+
+    public MarkupEndTagSyntax WithAttributes(SyntaxList<RazorSyntaxNode> attributes)
+    {
+        return Update(OpenAngle, Bang, Name, attributes, CloseAngle);
+    }
+
+    public MarkupEndTagSyntax WithCloseAngle(SyntaxToken closeAngle)
+    {
+        return Update(OpenAngle, Bang, Name, Attributes, closeAngle);
+    }
+
+    public MarkupEndTagSyntax AddAttributes(params RazorSyntaxNode[] items)
+    {
+        return WithAttributes(this.Attributes.AddRange(items));
     }
   }
 

@@ -576,141 +576,140 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
 
             tagName = null;
             tagMode = MarkupTagMode.Invalid;
+            isWellFormed = false;
+
+            var openAngleToken = EatCurrentToken(); // Accept '<'
+            var isBangEscape = TryParseBangEscape(out var bangToken);
+
+            if (At(SyntaxKind.Text))
+            {
+                tagName = CurrentToken.Content;
+                tagMode = MarkupTagMode.Normal;
+
+                if (isBangEscape)
+                {
+                    // We don't want to group <p> and </!p> together.
+                    tagName = "!" + tagName;
+                }
+            }
+
+            if (mode == ParseMode.MarkupInCodeBlock &&
+                _tagTracker.Count == 0 &&
+                string.Equals(tagName, SyntaxConstants.TextTagName, StringComparison.OrdinalIgnoreCase))
+            {
+                // "<text>" tag is special only if it is the outermost tag.
+                return ParseStartTextTag(openAngleToken, out tagMode, out isWellFormed);
+            }
+
+            var tagNameToken = At(SyntaxKind.Text) ? EatCurrentToken() : SyntaxFactory.MissingToken(SyntaxKind.Text);
+
+            var attributes = EmptySyntaxList;
             using (var pooledResult = Pool.Allocate<RazorSyntaxNode>())
             {
-                var tagBuilder = pooledResult.Builder;
+                var attributeBuilder = pooledResult.Builder;
+                
+                // Parse the contents of a tag like attributes.
+                ParseAttributes(attributeBuilder);
+                attributes = attributeBuilder.ToList();
+            }
 
-                AcceptAndMoveNext(); // Accept '<'
-                var isBangEscape = TryParseBangEscape(tagBuilder);
+            SyntaxToken forwardSlashToken = null;
+            if (At(SyntaxKind.ForwardSlash))
+            {
+                // This is a self closing tag.
+                tagMode = MarkupTagMode.SelfClosing;
+                forwardSlashToken = EatCurrentToken();
+            }
 
-                if (At(SyntaxKind.Text))
+            var closeAngleToken = SyntaxFactory.MissingToken(SyntaxKind.CloseAngle);
+            if (mode == ParseMode.MarkupInCodeBlock)
+            {
+                if (EndOfFile || !At(SyntaxKind.CloseAngle))
                 {
-                    tagName = CurrentToken.Content;
-                    tagMode = MarkupTagMode.Normal;
-
-                    if (isBangEscape)
+                    // Unfinished tag
+                    Context.ErrorSink.OnError(
+                        RazorDiagnosticFactory.CreateParsing_UnfinishedTag(
+                            new SourceSpan(
+                                tagName == null ? tagStartLocation : SourceLocationTracker.Advance(tagStartLocation, "<"),
+                                Math.Max(tagName?.Length ?? 0, 1)),
+                            tagName ?? string.Empty));
+                }
+                else
+                {
+                    if (At(SyntaxKind.CloseAngle))
                     {
-                        // We don't want to group <p> and </!p> together.
-                        tagName = "!" + tagName;
+                        isWellFormed = true;
+                        closeAngleToken = EatCurrentToken();
                     }
-                }
 
-                if (mode == ParseMode.MarkupInCodeBlock &&
-                    _tagTracker.Count == 0 &&
-                    string.Equals(tagName, SyntaxConstants.TextTagName, StringComparison.OrdinalIgnoreCase))
-                {
-                    // "<text>" tag is special only if it is the outermost tag.
-                    return ParseStartTextTag(out tagMode, out isWellFormed);
-                }
-
-                TryAccept(SyntaxKind.Text);
-
-                if (At(SyntaxKind.CloseAngle) && mode == ParseMode.MarkupInCodeBlock)
-                {
                     // Completed tags in code blocks have no accepted characters.
                     SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
-                }
 
-                // Output open angle and tag name
-                tagBuilder.Add(OutputAsMarkupLiteral());
-
-                // Parse the contents of a tag like attributes.
-                ParseAttributes(tagBuilder);
-
-                if (TryAccept(SyntaxKind.ForwardSlash))
-                {
-                    // This is a self closing tag.
-                    tagMode = MarkupTagMode.SelfClosing;
-                }
-
-                if (mode == ParseMode.MarkupInCodeBlock)
-                {
-                    if (EndOfFile || !At(SyntaxKind.CloseAngle))
+                    if (tagMode != MarkupTagMode.SelfClosing && ParserHelpers.VoidElements.Contains(tagName))
                     {
-                        // Unfinished tag
-                        isWellFormed = false;
-                        Context.ErrorSink.OnError(
-                            RazorDiagnosticFactory.CreateParsing_UnfinishedTag(
-                                new SourceSpan(
-                                    tagName == null ? tagStartLocation : SourceLocationTracker.Advance(tagStartLocation, "<"),
-                                    Math.Max(tagName?.Length ?? 0, 1)),
-                                tagName ?? string.Empty));
-                    }
-                    else
-                    {
-                        isWellFormed = TryAccept(SyntaxKind.CloseAngle);
+                        // This is a void element.
+                        // Technically, void elements like "meta" are not allowed to have end tags. Just in case they do,
+                        // we need to look ahead at the next set of tokens.
 
-                        // Completed tags in code blocks have no accepted characters.
-                        SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
+                        // Place a bookmark
+                        var bookmark = CurrentStart.AbsoluteIndex;
 
-                        if (tagMode != MarkupTagMode.SelfClosing && ParserHelpers.VoidElements.Contains(tagName))
+                        // Skip whitespace
+                        ReadWhile(IsSpacingToken(includeNewLines: true));
+
+                        // Open Angle
+                        if (At(SyntaxKind.OpenAngle) && NextIs(SyntaxKind.ForwardSlash))
                         {
-                            // This is a void element.
-                            // Technically, void elements like "meta" are not allowed to have end tags. Just in case they do,
-                            // we need to look ahead at the next set of tokens.
-
-                            // Place a bookmark
-                            var bookmark = CurrentStart.AbsoluteIndex;
-
-                            // Skip whitespace
-                            var whiteSpace = ReadWhile(IsSpacingToken(includeNewLines: true));
-
-                            // Open Angle
-                            if (At(SyntaxKind.OpenAngle) && NextIs(SyntaxKind.ForwardSlash))
-                            {
-                                var openAngle = CurrentToken;
-                                NextToken();
-                                Assert(SyntaxKind.ForwardSlash);
-                                var forwardSlash = CurrentToken;
-                                NextToken();
-                                if (!At(SyntaxKind.Text) || !string.Equals(CurrentToken.Content, tagName, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    // There is no matching end void tag.
-                                    tagMode = MarkupTagMode.Void;
-                                }
-                            }
-                            else
+                            NextToken();
+                            Assert(SyntaxKind.ForwardSlash);
+                            NextToken();
+                            if (!At(SyntaxKind.Text) || !string.Equals(CurrentToken.Content, tagName, StringComparison.OrdinalIgnoreCase))
                             {
                                 // There is no matching end void tag.
                                 tagMode = MarkupTagMode.Void;
                             }
-
-                            // Go back to the bookmark and just finish this tag at the close angle
-                            Context.Source.Position = bookmark;
-                            NextToken();
                         }
+                        else
+                        {
+                            // There is no matching end void tag.
+                            tagMode = MarkupTagMode.Void;
+                        }
+
+                        // Go back to the bookmark and just finish this tag at the close angle
+                        Context.Source.Position = bookmark;
+                        NextToken();
                     }
                 }
-                else
-                {
-                    isWellFormed = TryAccept(SyntaxKind.CloseAngle);
-                }
-
-                // End tag block
-                tagBuilder.Add(OutputAsMarkupLiteral());
-                var tagBlock = SyntaxFactory.MarkupStartTag(tagBuilder.ToList());
-                if (string.Equals(tagName, ScriptTagName, StringComparison.OrdinalIgnoreCase))
-                {
-                    // If the script tag expects javascript content then we should do minimal parsing until we reach
-                    // the end script tag. Don't want to incorrectly parse a "var tag = '<input />';" as an HTML tag.
-                    if (!ScriptTagExpectsHtml(tagBlock))
-                    {
-                        tagMode = MarkupTagMode.Script;
-                    }
-                }
-
-                return tagBlock;
             }
+            else if (At(SyntaxKind.CloseAngle))
+            {
+                isWellFormed = true;
+                closeAngleToken = EatCurrentToken();
+            }
+
+            // End tag block
+            var startTag = SyntaxFactory.MarkupStartTag(openAngleToken, bangToken, tagNameToken, attributes, forwardSlashToken, closeAngleToken);
+            if (string.Equals(tagName, ScriptTagName, StringComparison.OrdinalIgnoreCase))
+            {
+                // If the script tag expects javascript content then we should do minimal parsing until we reach
+                // the end script tag. Don't want to incorrectly parse a "var tag = '<input />';" as an HTML tag.
+                if (!ScriptTagExpectsHtml(startTag))
+                {
+                    tagMode = MarkupTagMode.Script;
+                }
+            }
+
+            return GetNodeWithSpanContext(startTag);
         }
 
-        private MarkupStartTagSyntax ParseStartTextTag(out MarkupTagMode tagMode, out bool isWellFormed)
+        private MarkupStartTagSyntax ParseStartTextTag(SyntaxToken openAngleToken, out MarkupTagMode tagMode, out bool isWellFormed)
         {
             // At this point, we should have already accepted the open angle. We won't get here if the tag is escaped.
             tagMode = MarkupTagMode.Normal;
             var textLocation = CurrentStart;
             Assert(SyntaxKind.Text);
 
-            AcceptAndMoveNext();
+            var tagNameToken = EatCurrentToken();
 
             AcceptWhile(IsSpacingToken(includeNewLines: false));
             if (At(SyntaxKind.CloseAngle) ||
@@ -1678,19 +1677,15 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
             }
         }
 
-        private bool TryParseBangEscape(in SyntaxListBuilder<RazorSyntaxNode> builder)
+        private bool TryParseBangEscape(out SyntaxToken bangToken)
         {
+            bangToken = null;
             if (IsBangEscape(lookahead: 0))
             {
-                builder.Add(OutputAsMarkupLiteral());
-
                 // Accept the parser escape character '!'.
                 Assert(SyntaxKind.Bang);
-                AcceptAndMoveNext();
+                bangToken = EatCurrentToken();
 
-                // Setup the metacode span that we will be outputing.
-                SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
-                builder.Add(OutputAsMetaCode(Output()));
                 return true;
             }
 
