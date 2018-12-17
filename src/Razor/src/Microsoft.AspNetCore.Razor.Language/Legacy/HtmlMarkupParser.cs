@@ -711,43 +711,67 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
 
             var tagNameToken = EatCurrentToken();
 
-            AcceptWhile(IsSpacingToken(includeNewLines: false));
-            if (At(SyntaxKind.CloseAngle) ||
-                (At(SyntaxKind.ForwardSlash) && NextIs(SyntaxKind.CloseAngle)))
+            using (var pooledResult = Pool.Allocate<RazorSyntaxNode>())
             {
-                if (At(SyntaxKind.ForwardSlash))
+                var miscAttributeContentBuilder = pooledResult.Builder;
+                SyntaxToken forwardSlashToken = null;
+                SyntaxToken closeAngleToken = null;
+
+                AcceptWhile(IsSpacingToken(includeNewLines: false));
+                miscAttributeContentBuilder.Add(OutputAsMarkupLiteral());
+
+                if (At(SyntaxKind.CloseAngle) ||
+                    (At(SyntaxKind.ForwardSlash) && NextIs(SyntaxKind.CloseAngle)))
                 {
-                    tagMode = MarkupTagMode.SelfClosing;
-                    AcceptAndMoveNext(); // '/'
+                    if (At(SyntaxKind.ForwardSlash))
+                    {
+                        tagMode = MarkupTagMode.SelfClosing;
+                        forwardSlashToken = EatCurrentToken();
+                    }
+
+                    closeAngleToken = EatCurrentToken();
+                    SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
+                }
+                else
+                {
+                    Context.ErrorSink.OnError(
+                        RazorDiagnosticFactory.CreateParsing_TextTagCannotContainAttributes(
+                            new SourceSpan(textLocation, contentLength: 4 /* text */)));
+
+                    RecoverTextTag(out var miscContent, out closeAngleToken);
+                    miscAttributeContentBuilder.Add(miscContent);
                 }
 
-                AcceptAndMoveNext(); // '>'
-                SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
+                isWellFormed = true;
+                SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
+                var startTextTag = SyntaxFactory.MarkupStartTag(
+                    openAngleToken,
+                    bang: null,
+                    name: tagNameToken,
+                    attributes: miscAttributeContentBuilder.ToList(),
+                    forwardSlash: forwardSlashToken,
+                    closeAngle: closeAngleToken);
+                // TODO: set MarkupTransition annotation
+
+                return GetNodeWithSpanContext(startTextTag);
             }
-            else
-            {
-                Context.ErrorSink.OnError(
-                    RazorDiagnosticFactory.CreateParsing_TextTagCannotContainAttributes(
-                        new SourceSpan(textLocation, contentLength: 4 /* text */)));
-
-                RecoverTextTag();
-            }
-
-            isWellFormed = true;
-            SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
-            var transition = GetNodeWithSpanContext(SyntaxFactory.MarkupTransition(Output()));
-            var startTextTag = SyntaxFactory.MarkupStartTag(transition);
-
-            return startTextTag;
         }
 
-        private void RecoverTextTag()
+        private void RecoverTextTag(out MarkupTextLiteralSyntax miscContent, out SyntaxToken closeAngleToken)
         {
             // We don't want to skip-to and parse because there shouldn't be anything in the body of text tags.
             AcceptUntil(SyntaxKind.CloseAngle, SyntaxKind.NewLine);
+            miscContent = OutputAsMarkupLiteral();
 
             // Include the close angle in the text tag block if it's there, otherwise just move on
-            TryAccept(SyntaxKind.CloseAngle);
+            if (At(SyntaxKind.CloseAngle))
+            {
+                closeAngleToken = EatCurrentToken();
+            }
+            else
+            {
+                closeAngleToken = SyntaxFactory.MissingToken(SyntaxKind.CloseAngle);
+            }
         }
 
         private MarkupEndTagSyntax ParseEndTag(ParseMode mode, out string tagName, out bool isWellFormed)
